@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Network
 
 struct CheckoutView: View {
     @ObservedObject var order: Order
@@ -49,19 +50,31 @@ struct CheckoutView: View {
         request.httpMethod = "POST"
         request.httpBody = encoded
         
-        URLSession.shared.dataTask(with: request) {
-            data, response, error in
-            guard let data = data else {
-                print("No data in response: \(error?.localizedDescription ?? "Unknown error").")
-                return
-            }
-            if let decodedOrder = try? JSONDecoder().decode(Order.self, from: data) {
-                self.confirmationMessage = "Your order for \(decodedOrder.quantity)x \(Order.types[decodedOrder.type].lowercased()) cupcakes is on its way!"
-                self.showingConfirmation = true
+        let monitor = NWPathMonitor()
+        
+        monitor.pathUpdateHandler = { path in
+            if path.status == .satisfied {
+                URLSession.shared.dataTask(with: request) {
+                    data, response, error in
+                    guard let data = data else {
+                        print("No data in response: \(error?.localizedDescription ?? "Unknown error").")
+                        return
+                    }
+                    if let decodedOrder = try? JSONDecoder().decode(Order.self, from: data) {
+                        self.confirmationMessage = "Your order for \(decodedOrder.quantity)x \(Order.types[decodedOrder.type].lowercased()) cupcakes is on its way!"
+                        self.showingConfirmation = true
+                    } else {
+                        print("Invalid response from server")
+                    }
+                }.resume()
             } else {
-                print("Invalid response from server")
+                print("No internet connection!")
             }
-        }.resume()
+
+
+        }
+        let queue = DispatchQueue(label: "Monitor")
+        monitor.start(queue: queue)
     }
 }
 
